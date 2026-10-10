@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Burhan Asghar — Scientific Calculator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    /* Dark iOS Liquid Glass */
+    :root {
+      color-scheme: dark;
+      --text: #f5f5f7;
+      --muted: #a1a1aa;
+      --accent: #0a84ff;
+      --accent-soft: #64d2ff;
+      --err: #ff453a;
+      --warn: #ffd60a;
+      --btn-num: rgba(58, 58, 60, 0.72);
+      --btn-fn: rgba(44, 44, 46, 0.78);
+      --btn-op: rgba(10, 132, 255, 0.22);
+      --btn-press: rgba(10, 132, 255, 0.38);
+      --primary: linear-gradient(165deg, #5ac8fa 0%, #0a84ff 48%, #0071e3 100%);
+      --primary-text: #ffffff;
+      --font: "DM Sans", -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
+      --mono: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      min-height: 100%;
+      color: var(--text);
+      font-family: var(--font);
+      -webkit-font-smoothing: antialiased;
+      /* Transparent so Streamlit page glow shows; liquid field on ::before */
+      background: transparent;
+      overflow-x: hidden;
+    }
+
+    /* Brighter liquid color field — glass needs light to refract */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: -25%;
+      z-index: -2;
+      background:
+        radial-gradient(ellipse 60% 50% at 10% 15%, rgba(56, 152, 255, 0.65), transparent 55%),
+        radial-gradient(ellipse 50% 45% at 90% 10%, rgba(120, 110, 255, 0.5), transparent 52%),
+        radial-gradient(ellipse 48% 42% at 75% 85%, rgba(64, 220, 180, 0.35), transparent 55%),
+        radial-gradient(ellipse 40% 38% at 15% 90%, rgba(255, 80, 120, 0.28), transparent 50%),
+        linear-gradient(160deg, #141828 0%, #1a1f35 45%, #0e1018 100%);
+      animation: liquidDrift 20s ease-in-out infinite alternate;
+    }
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      background: radial-gradient(circle at 50% 0%, rgba(255,255,255,0.1), transparent 45%);
+      pointer-events: none;
+    }
+    @keyframes liquidDrift {
+      0% { transform: translate(0, 0) scale(1); }
+      100% { transform: translate(-3%, 2%) scale(1.06); }
+    }
+
+    .wrap {
+      max-width: 980px;
+      margin: 0 auto;
+      /* Extra inset so panel radius is never clipped by the iframe */
+      padding: 1.15rem 1rem 1.75rem;
+      animation: riseIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    @keyframes riseIn {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .brand {
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -0.035em;
+      color: #ffffff;
+      margin: 0 0 0.1rem;
+      text-shadow: 0 2px 24px rgba(10, 132, 255, 0.35);
+    }
+    .product {
+      margin: 0 0 0.3rem;
+      font-size: 1.02rem;
+      font-weight: 600;
+      color: #e5e5ea;
+    }
+    .hint {
+      margin: 0 0 1.1rem;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: #8e8e93;
+      line-height: 1.45;
+    }
+
+    /* Main glass card — lighter frost so round corners + glass read clearly */
+    .panel {
+      position: relative;
+      isolation: isolate;
+      background:
+        linear-gradient(
+          145deg,
+          rgba(255, 255, 255, 0.28) 0%,
+          rgba(255, 255, 255, 0.12) 38%,
+          rgba(160, 190, 255, 0.14) 100%
+        );
+      backdrop-filter: blur(40px) saturate(200%);
+      -webkit-backdrop-filter: blur(40px) saturate(200%);
+      border: 1.5px solid rgba(255, 255, 255, 0.38);
+      border-radius: 32px;
+      box-shadow:
+        0 28px 64px rgba(0, 0, 0, 0.45),
+        0 8px 24px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.45),
+        inset 0 -1px 0 rgba(255, 255, 255, 0.08);
+      padding: 1.1rem;
+      overflow: hidden;
+    }
+    .panel::before {
+      content: "";
+      position: absolute;
+      top: -40%;
+      left: -12%;
+      width: 70%;
+      height: 75%;
+      background: radial-gradient(circle, rgba(255,255,255,0.35), transparent 68%);
+      pointer-events: none;
+      animation: glossSweep 12s ease-in-out infinite alternate;
+      z-index: 0;
+    }
+    .panel::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      pointer-events: none;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12);
+      z-index: 0;
+    }
+    .panel > * {
+      position: relative;
+      z-index: 1;
+    }
+    @keyframes glossSweep {
+      from { transform: translate(0, 0); opacity: 0.55; }
+      to { transform: translate(22%, 14%); opacity: 0.95; }
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.9rem;
+      align-items: stretch;
+      position: relative;
+      z-index: 1;
+    }
+    .col-calc {
+      display: flex;
+      flex-direction: column;
+      gap: 0.48rem;
+      min-width: 0;
+    }
+    .col-history {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+    }
+
+    .screen {
+      position: relative;
+      background: rgba(0, 0, 0, 0.38);
+      backdrop-filter: blur(24px) saturate(160%);
+      -webkit-backdrop-filter: blur(24px) saturate(160%);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 20px;
+      padding: 1rem 1.1rem 1.1rem;
+      min-height: 7.3rem;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.12),
+        inset 0 8px 24px rgba(0, 0, 0, 0.35),
+        0 8px 24px rgba(0, 0, 0, 0.25);
+    }
+    .screen-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-bottom: 0.45rem;
+      flex-wrap: wrap;
+    }
+    .badge {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 0.24rem 0.65rem;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.08);
+      color: #f5f5f7;
+      backdrop-filter: blur(10px);
+    }
+    .badge.mode {
+      color: #64d2ff;
+      border-color: rgba(10, 132, 255, 0.45);
+      background: rgba(10, 132, 255, 0.2);
+    }
+    .badge.op {
+      color: #ffd60a;
+      border-color: rgba(255, 214, 10, 0.35);
+      background: rgba(255, 214, 10, 0.14);
+    }
+
+    .expr {
+      font-family: var(--mono);
+      font-size: 1.02rem;
+      font-weight: 500;
+      color: #aeaeb2;
+      text-align: right;
+      min-height: 1.4rem;
+      word-break: break-all;
+      white-space: pre-wrap;
+    }
+    .expr .caret {
+      display: inline-block;
+      width: 2px;
+      height: 1.05em;
+      margin-left: 1px;
+      background: #0a84ff;
+      vertical-align: text-bottom;
+      animation: blink 1s step-end infinite;
+      box-shadow: 0 0 8px rgba(10, 132, 255, 0.7);
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    .result {
+      font-family: var(--mono);
+      font-size: 2.15rem;
+      font-weight: 700;
+      text-align: right;
+      word-break: break-all;
+      margin-top: 0.3rem;
+      line-height: 1.2;
+      color: #ffffff;
+      letter-spacing: -0.02em;
+      text-shadow: 0 1px 12px rgba(255, 255, 255, 0.12);
+    }
+    .error {
+      color: var(--err);
+      font-size: 0.86rem;
+      text-align: right;
+      margin-top: 0.4rem;
+      font-weight: 600;
+    }
+
+    .row-mem, .pad {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 0.42rem;
+    }
+    .pad { flex: 1; }
+
+    button.key {
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      font-weight: 650;
+      height: 2.9rem;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: var(--btn-num);
+      color: #f5f5f7;
+      cursor: pointer;
+      touch-action: manipulation;
+      backdrop-filter: blur(18px) saturate(160%);
+      -webkit-backdrop-filter: blur(18px) saturate(160%);
+      box-shadow:
+        0 4px 12px rgba(0, 0, 0, 0.28),
+        inset 0 1px 0 rgba(255, 255, 255, 0.14);
+      transition: background 0.14s ease, transform 0.1s ease, box-shadow 0.14s ease, border-color 0.14s ease;
+    }
+    button.key:hover {
+      background: rgba(72, 72, 74, 0.88);
+      border-color: rgba(255, 255, 255, 0.2);
+      box-shadow:
+        0 6px 16px rgba(0, 0, 0, 0.35),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }
+    button.key:focus-visible {
+      outline: 2px solid #0a84ff;
+      outline-offset: 2px;
+    }
+    button.key.pressed, button.key:active {
+      background: var(--btn-press) !important;
+      transform: scale(0.96);
+    }
+    button.key.primary {
+      background: var(--primary);
+      border-color: rgba(255, 255, 255, 0.28);
+      color: var(--primary-text);
+      font-weight: 700;
+      grid-column: span 2;
+      box-shadow:
+        0 10px 28px rgba(10, 132, 255, 0.42),
+        inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    }
+    button.key.op {
+      color: #64d2ff;
+      background: var(--btn-op);
+      border-color: rgba(10, 132, 255, 0.28);
+      font-weight: 700;
+    }
+    button.key.fn {
+      color: #e5e5ea;
+      background: var(--btn-fn);
+      font-size: 0.8rem;
+      font-weight: 650;
+    }
+
+    .history {
+      flex: 1 1 auto;
+      height: 100%;
+      min-height: 0;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 20px;
+      padding: 0.9rem;
+      background: rgba(0, 0, 0, 0.32);
+      backdrop-filter: blur(24px) saturate(150%);
+      -webkit-backdrop-filter: blur(24px) saturate(150%);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.1),
+        0 10px 28px rgba(0, 0, 0, 0.28);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .history h3 {
+      margin: 0 0 0.55rem;
+      font-size: 0.75rem;
+      color: #8e8e93;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      flex: 0 0 auto;
+    }
+    #historyList {
+      flex: 1 1 auto;
+      overflow-y: auto;
+      min-height: 0;
+      padding-right: 0.15rem;
+    }
+    .hist-item {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: #d1d1d6;
+      padding: 0.45rem 0.55rem;
+      border-radius: 12px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: background 0.12s ease, border-color 0.12s ease;
+    }
+    .hist-item:hover, .hist-item:focus-visible {
+      border-color: rgba(255, 255, 255, 0.14);
+      background: rgba(255, 255, 255, 0.08);
+      outline: none;
+    }
+    .hist-item span {
+      color: #64d2ff;
+      font-weight: 700;
+    }
+
+    @media (max-width: 760px) {
+      .layout { grid-template-columns: 1fr; }
+      .history { min-height: 14rem; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      body::before, .panel::before, .wrap { animation: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap" role="application" aria-label="Scientific calculator">
+    <h1 class="brand">Burhan Asghar</h1>
+    <p class="product">Scientific Calculator</p>
+    <p class="hint">Enter = calculate · Esc = clear · brackets optional — cos 1 or cos(1 both work</p>
+
+    <div class="panel">
+      <div class="layout">
+        <div class="col-calc">
+          <div class="screen" aria-live="polite">
+            <div class="screen-top">
+              <span class="badge mode" id="modeBadge">RAD</span>
+              <span class="badge op" id="opBadge" hidden></span>
+            </div>
+            <div class="expr" id="exprDisplay" aria-label="Expression"></div>
+            <div class="result" id="resultDisplay">0</div>
+            <div class="error" id="errorDisplay" hidden></div>
+          </div>
+
+          <div class="row-mem">
+            <button type="button" class="key" data-act="MC" aria-label="Memory clear">MC</button>
+            <button type="button" class="key" data-act="MR" aria-label="Memory recall">MR</button>
+            <button type="button" class="key" data-act="M+" aria-label="Memory add">M+</button>
+            <button type="button" class="key" data-act="M-" aria-label="Memory subtract">M-</button>
+            <button type="button" class="key" data-act="Ans" aria-label="Previous answer">Ans</button>
+          </div>
+
+          <div class="pad" id="pad">
+        <button type="button" class="key op" data-act="mode" aria-label="Toggle angle mode">DEG</button>
+        <button type="button" class="key" data-act="C" aria-label="Clear">C</button>
+        <button type="button" class="key" data-act="bksp" aria-label="Backspace">⌫</button>
+        <button type="button" class="key" data-ins="(" aria-label="Open parenthesis">(</button>
+        <button type="button" class="key" data-ins=")" aria-label="Close parenthesis">)</button>
+
+        <button type="button" class="key fn" data-ins="sin(" data-flash="s" aria-label="Sine">sin</button>
+        <button type="button" class="key fn" data-ins="cos(" data-flash="c" aria-label="Cosine">cos</button>
+        <button type="button" class="key fn" data-ins="tan(" data-flash="t" aria-label="Tangent">tan</button>
+        <button type="button" class="key op" data-ins="^" aria-label="Power">xʸ</button>
+        <button type="button" class="key op" data-ins="÷" aria-label="Divide">÷</button>
+
+        <button type="button" class="key fn" data-ins="asin(" aria-label="Arcsine">asin</button>
+        <button type="button" class="key fn" data-ins="acos(" aria-label="Arccosine">acos</button>
+        <button type="button" class="key fn" data-ins="atan(" aria-label="Arctangent">atan</button>
+        <button type="button" class="key op" data-ins="π" data-flash="p" aria-label="Pi">π</button>
+        <button type="button" class="key op" data-ins="×" aria-label="Multiply">×</button>
+
+        <button type="button" class="key fn" data-ins="ln(" data-flash="n" aria-label="Natural log">ln</button>
+        <button type="button" class="key fn" data-ins="log(" data-flash="l" aria-label="Log base 10">log</button>
+        <button type="button" class="key fn" data-ins="sqrt(" data-flash="r" aria-label="Square root">√</button>
+        <button type="button" class="key op" data-ins="e" data-flash="e" aria-label="Euler number">e</button>
+        <button type="button" class="key op" data-ins="−" aria-label="Subtract">−</button>
+
+        <button type="button" class="key" data-ins="7" aria-label="7">7</button>
+        <button type="button" class="key" data-ins="8" aria-label="8">8</button>
+        <button type="button" class="key" data-ins="9" aria-label="9">9</button>
+        <button type="button" class="key op" data-ins="!" aria-label="Factorial">n!</button>
+        <button type="button" class="key op" data-ins="+" aria-label="Add">+</button>
+
+        <button type="button" class="key" data-ins="4" aria-label="4">4</button>
+        <button type="button" class="key" data-ins="5" aria-label="5">5</button>
+        <button type="button" class="key" data-ins="6" aria-label="6">6</button>
+        <button type="button" class="key op" data-ins="%" aria-label="Percent">%</button>
+        <button type="button" class="key op" data-ins="^" aria-label="Caret power">^</button>
+
+        <button type="button" class="key" data-ins="1" aria-label="1">1</button>
+        <button type="button" class="key" data-ins="2" aria-label="2">2</button>
+        <button type="button" class="key" data-ins="3" aria-label="3">3</button>
+        <button type="button" class="key" data-ins="." aria-label="Decimal point">.</button>
+        <button type="button" class="key" data-ins="," aria-label="Comma">,</button>
+
+        <button type="button" class="key" data-ins="0" aria-label="0">0</button>
+        <button type="button" class="key fn" data-ins="nPr(" aria-label="Permutations">nPr</button>
+        <button type="button" class="key fn" data-ins="nCr(" aria-label="Combinations">nCr</button>
+            <button type="button" class="key primary" data-act="eq" aria-label="Equals">=</button>
+          </div>
+        </div>
+
+        <div class="col-history">
+          <div class="history">
+            <h3>History</h3>
+            <div id="historyList"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+(function () {
+  "use strict";
+
+  /* ---------- Streamlit bridge (robust) ---------- */
+  function sendMessage(type, data) {
+    window.parent.postMessage(
+      Object.assign({ isStreamlitMessage: true, type: type }, data),
+      "*"
+    );
+  }
+  function setComponentValue(value) {
+    sendMessage("streamlit:setComponentValue", { value: value });
+  }
+  function setFrameHeight() {
+    const h = Math.max(document.body.scrollHeight, 640);
+    sendMessage("streamlit:setFrameHeight", { height: h + 16 });
+  }
+  function componentReady() {
+    sendMessage("streamlit:componentReady", { apiVersion: 1 });
+    setFrameHeight();
+  }
+
+  /* ---------- State ---------- */
+  const FN_UNITS = [
+    "asin(", "acos(", "atan(", "sinh(", "cosh(", "tanh(",
+    "sin(", "cos(", "tan(", "log2(", "log(", "ln(",
+    "sqrt(", "cbrt(", "abs(", "exp(", "floor(", "ceil(", "round(",
+    "nPr(", "nCr(", "factorial(",
+  ].sort((a, b) => b.length - a.length);
+
+  const SCI_LABELS = {
+    "sin(": "sin", "cos(": "cos", "tan(": "tan",
+    "asin(": "asin", "acos(": "acos", "atan(": "atan",
+    "ln(": "ln", "log(": "log", "sqrt(": "√", "nPr(": "nPr", "nCr(": "nCr",
+  };
+
+  let expression = "";
+  let cursor = 0;
+  let resultText = "0";
+  let errorText = "";
+  let justEvaluated = false;
+  let angleMode = "RAD";
+  let ans = 0;
+  let memory = 0;
+  let history = [];
+  let lastHandledReply = null;
+
+  const exprEl = document.getElementById("exprDisplay");
+  const resultEl = document.getElementById("resultDisplay");
+  const errorEl = document.getElementById("errorDisplay");
+  const modeBadge = document.getElementById("modeBadge");
+  const opBadge = document.getElementById("opBadge");
+  const historyList = document.getElementById("historyList");
+  const modeBtn = document.querySelector('[data-act="mode"]');
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  function detectOp(expr) {
+    let best = null, bestPos = -1;
+    for (const [tok, label] of Object.entries(SCI_LABELS)) {
+      const p = expr.lastIndexOf(tok);
+      if (p > bestPos) { bestPos = p; best = label; }
+    }
+    return best;
+  }
+
+  function render() {
+    const left = expression.slice(0, cursor);
+    const right = expression.slice(cursor);
+    exprEl.innerHTML =
+      escapeHtml(left) +
+      '<span class="caret" aria-hidden="true"></span>' +
+      escapeHtml(right);
+
+    if (errorText) {
+      resultEl.textContent = "Error";
+      errorEl.hidden = false;
+      errorEl.textContent = errorText;
+    } else if (justEvaluated) {
+      resultEl.textContent = resultText;
+      errorEl.hidden = true;
+    } else {
+      resultEl.textContent = expression || "0";
+      errorEl.hidden = true;
+    }
+
+    modeBadge.textContent = angleMode;
+    if (modeBtn) {
+      modeBtn.textContent =
+        angleMode === "RAD" ? "DEG" : angleMode === "DEG" ? "GRAD" : "RAD";
+    }
+
+    const op = detectOp(expression);
+    if (op && !justEvaluated) {
+      opBadge.hidden = false;
+      opBadge.textContent = "Using: " + op;
+    } else {
+      opBadge.hidden = true;
+    }
+
+    historyList.innerHTML = "";
+    if (!history.length) {
+      historyList.innerHTML =
+        '<div class="hist-item" style="cursor:default">No calculations yet.</div>';
+    } else {
+      history.slice(0, 20).forEach((item, idx) => {
+        const div = document.createElement("div");
+        div.className = "hist-item";
+        div.tabIndex = 0;
+        div.setAttribute("role", "button");
+        div.innerHTML =
+          escapeHtml(item.expr) +
+          " = <span>" +
+          escapeHtml(String(item.result)) +
+          "</span>";
+        div.addEventListener("click", () => loadHistory(idx));
+        div.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            loadHistory(idx);
+          }
+        });
+        historyList.appendChild(div);
+      });
+    }
+    setFrameHeight();
+  }
+
+  function loadHistory(idx) {
+    const item = history[idx];
+    if (!item) return;
+    expression = String(item.expr);
+    cursor = expression.length;
+    resultText = String(item.result);
+    errorText = "";
+    justEvaluated = false;
+    render();
+  }
+
+  function flashButton(selector) {
+    const btn =
+      typeof selector === "string" ? document.querySelector(selector) : selector;
+    if (!btn) return;
+    btn.classList.add("pressed");
+    setTimeout(() => btn.classList.remove("pressed"), 140);
+  }
+
+  function flashByInsert(text) {
+    flashButton(document.querySelector('[data-ins="' + CSS.escape(text) + '"]'));
+  }
+
+  function startFreshIfNeeded(ch) {
+    if (!justEvaluated && !errorText) return;
+    const continueOps = "+-×÷*/^%()";
+    if (errorText || !continueOps.includes(ch)) {
+      expression = "";
+      cursor = 0;
+      errorText = "";
+      resultText = "0";
+    }
+    justEvaluated = false;
+  }
+
+  function insertText(text) {
+    startFreshIfNeeded(text[0] || "");
+    expression = expression.slice(0, cursor) + text + expression.slice(cursor);
+    cursor += text.length;
+    errorText = "";
+    justEvaluated = false;
+    render();
+  }
+
+  function deleteBackward() {
+    if (justEvaluated || errorText) {
+      clearAll();
+      return;
+    }
+    if (cursor <= 0) return;
+    const before = expression.slice(0, cursor);
+    let removed = 1;
+    for (const unit of FN_UNITS) {
+      if (before.endsWith(unit)) {
+        removed = unit.length;
+        break;
+      }
+    }
+    if (removed === 1 && before.endsWith("pi")) removed = 2;
+    expression = expression.slice(0, cursor - removed) + expression.slice(cursor);
+    cursor -= removed;
+    render();
+  }
+
+  function deleteForward() {
+    if (cursor >= expression.length) return;
+    const after = expression.slice(cursor);
+    let removed = 1;
+    for (const unit of FN_UNITS) {
+      if (after.startsWith(unit)) {
+        removed = unit.length;
+        break;
+      }
+    }
+    if (removed === 1 && after.startsWith("pi")) removed = 2;
+    expression = expression.slice(0, cursor) + expression.slice(cursor + removed);
+    render();
+  }
+
+  function clearAll() {
+    expression = "";
+    cursor = 0;
+    resultText = "0";
+    errorText = "";
+    justEvaluated = false;
+    try { sessionStorage.removeItem("sci_pending_nonce"); } catch (e) {}
+    render();
+  }
+
+  function cycleMode() {
+    angleMode =
+      angleMode === "RAD" ? "DEG" : angleMode === "DEG" ? "GRAD" : "RAD";
+    render();
+  }
+
+  function toEngineExpr(display) {
+    return display
+      .replace(/×/g, "*")
+      .replace(/÷/g, "/")
+      .replace(/−/g, "-")
+      .replace(/π/g, "pi")
+      .replace(/\^/g, "**");
+  }
+
+  function sanitizePaste(text) {
+    return String(text || "")
+      .replace(/[^0-9+\-*/^()%!,.\sA-Za-z_π×÷−]/g, "")
+      .slice(0, 500);
+  }
+
+  function evaluate() {
+    const expr = expression.trim();
+    if (!expr) {
+      errorText = "Please enter something to calculate";
+      justEvaluated = false;
+      render();
+      return;
+    }
+    const nonce = Date.now() + Math.floor(Math.random() * 1000);
+    try {
+      sessionStorage.setItem("sci_pending_nonce", String(nonce));
+      sessionStorage.setItem("sci_pending_expr", expression);
+    } catch (e) {}
+
+    // Optimistic UI: show "…" while Python evaluates
+    resultText = "…";
+    errorText = "";
+    justEvaluated = true;
+    render();
+
+    setComponentValue({
+      action: "eval",
+      expression: toEngineExpr(expr),
+      display: expr,
+      angle_mode: angleMode,
+      nonce: nonce,
+      ans: ans,
+      memory: memory,
+    });
+  }
+
+  function applyPythonReply(args) {
+    if (!args) return;
+
+    // Sync shared state from Python on every render
+    if (Array.isArray(args.history)) history = args.history;
+    if (typeof args.ans === "number") ans = args.ans;
+    if (typeof args.memory === "number") memory = args.memory;
+    if (args.angle_mode) angleMode = args.angle_mode;
+
+    const reply = args.reply_nonce;
+    const hasPayload =
+      (args.result != null && args.result !== "") ||
+      (args.error != null && args.error !== "");
+
+    // Always show latest Python payload when nonce is new OR payload present after remount
+    if (reply != null && reply !== lastHandledReply && hasPayload) {
+      lastHandledReply = reply;
+
+      try {
+        const pe = sessionStorage.getItem("sci_pending_expr");
+        if (pe && !expression) {
+          expression = pe;
+          cursor = expression.length;
+        }
+      } catch (e) {}
+
+      if (args.error) {
+        errorText = String(args.error);
+        justEvaluated = false;
+        resultText = "Error";
+        if (args.display_expr) {
+          expression = String(args.display_expr);
+          cursor = expression.length;
+        }
+      } else {
+        errorText = "";
+        resultText = String(args.result);
+        expression = String(args.result);
+        cursor = expression.length;
+        justEvaluated = true;
+      }
+
+      try {
+        sessionStorage.removeItem("sci_pending_nonce");
+        sessionStorage.removeItem("sci_pending_expr");
+      } catch (e) {}
+    } else if (
+      reply != null &&
+      hasPayload &&
+      justEvaluated === false &&
+      resultText === "…"
+    ) {
+      // Remount race: pending UI showed … — apply even if nonce already seen
+      if (args.error) {
+        errorText = String(args.error);
+        resultText = "Error";
+      } else {
+        errorText = "";
+        resultText = String(args.result);
+        expression = String(args.result);
+        cursor = expression.length;
+        justEvaluated = true;
+      }
+    }
+
+    render();
+  }
+
+  /* ---------- Clicks ---------- */
+  document.querySelectorAll("button.key").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const ins = btn.getAttribute("data-ins");
+      const act = btn.getAttribute("data-act");
+      flashButton(btn);
+      if (ins != null) {
+        insertText(ins);
+        return;
+      }
+      if (act === "C") {
+        clearAll();
+        return;
+      }
+      if (act === "bksp") {
+        deleteBackward();
+        return;
+      }
+      if (act === "eq") {
+        evaluate();
+        return;
+      }
+      if (act === "mode") {
+        cycleMode();
+        return;
+      }
+      if (act === "MC") {
+        memory = 0;
+        return;
+      }
+      if (act === "MR") {
+        insertText(String(memory));
+        return;
+      }
+      if (act === "M+") {
+        const v = justEvaluated ? Number(resultText) : Number(expression);
+        if (!Number.isNaN(v)) memory += v;
+        return;
+      }
+      if (act === "M-") {
+        const v = justEvaluated ? Number(resultText) : Number(expression);
+        if (!Number.isNaN(v)) memory -= v;
+        return;
+      }
+      if (act === "Ans") {
+        insertText("ans");
+      }
+    });
+  });
+
+  /* ---------- Global keyboard (once) ---------- */
+  const LETTER = {
+    s: "sin(",
+    c: "cos(",
+    t: "tan(",
+    l: "log(",
+    n: "ln(",
+    r: "sqrt(",
+    p: "π",
+  };
+
+  function onKeyDown(e) {
+    if (e.altKey) return;
+    if ((e.ctrlKey || e.metaKey) && !["c", "C", "v", "V"].includes(e.key))
+      return;
+
+    const key = e.key;
+
+    if ((e.ctrlKey || e.metaKey) && (key === "c" || key === "C")) {
+      e.preventDefault();
+      const text = justEvaluated && !errorText ? resultText : expression;
+      if (navigator.clipboard && text)
+        navigator.clipboard.writeText(text).catch(() => {});
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && (key === "v" || key === "V")) {
+      e.preventDefault();
+      if (!navigator.clipboard) return;
+      navigator.clipboard.readText().then((t) => {
+        const clean = sanitizePaste(t);
+        if (clean) insertText(clean);
+      }).catch(() => {});
+      return;
+    }
+    if (e.ctrlKey || e.metaKey) return;
+
+    if (key === "Enter" || key === "=") {
+      if (e.repeat) {
+        e.preventDefault();
+        return;
+      }
+      e.preventDefault();
+      flashButton('[data-act="eq"]');
+      evaluate();
+      return;
+    }
+    if (key === "Escape") {
+      e.preventDefault();
+      flashButton('[data-act="C"]');
+      clearAll();
+      return;
+    }
+    if (key === "Backspace") {
+      e.preventDefault();
+      flashButton('[data-act="bksp"]');
+      deleteBackward();
+      return;
+    }
+    if (key === "Delete") {
+      e.preventDefault();
+      deleteForward();
+      return;
+    }
+    if (key === "ArrowLeft") {
+      e.preventDefault();
+      cursor = Math.max(0, cursor - 1);
+      render();
+      return;
+    }
+    if (key === "ArrowRight") {
+      e.preventDefault();
+      cursor = Math.min(expression.length, cursor + 1);
+      render();
+      return;
+    }
+    if (key === "Home") {
+      e.preventDefault();
+      cursor = 0;
+      render();
+      return;
+    }
+    if (key === "End") {
+      e.preventDefault();
+      cursor = expression.length;
+      render();
+      return;
+    }
+
+    const map = {
+      "*": "×",
+      "/": "÷",
+      "-": "−",
+      "+": "+",
+      ".": ".",
+      "(": "(",
+      ")": ")",
+      "^": "^",
+      "%": "%",
+      "!": "!",
+      ",": ",",
+    };
+    if (key >= "0" && key <= "9") {
+      e.preventDefault();
+      flashByInsert(key);
+      insertText(key);
+      return;
+    }
+    if (map[key] !== undefined) {
+      e.preventDefault();
+      flashByInsert(map[key]);
+      insertText(map[key]);
+      return;
+    }
+    if (key === "d" || key === "D") {
+      e.preventDefault();
+      flashButton('[data-act="mode"]');
+      cycleMode();
+      return;
+    }
+    if (key === "e" || key === "E") {
+      e.preventDefault();
+      flashByInsert("e");
+      insertText("e");
+      return;
+    }
+    const low = key.toLowerCase();
+    if (LETTER[low]) {
+      e.preventDefault();
+      const t = LETTER[low];
+      const btn =
+        document.querySelector('[data-flash="' + low + '"]') ||
+        document.querySelector('[data-ins="' + CSS.escape(t) + '"]');
+      flashButton(btn);
+      insertText(t);
+    }
+  }
+
+  if (!window.__burhanCalcKeyListener) {
+    window.__burhanCalcKeyListener = true;
+    window.addEventListener("keydown", onKeyDown, true);
+  }
+
+  /* ---------- Render from Python ---------- */
+  function extractArgs(event) {
+    if (!event) return {};
+    if (event.detail && event.detail.args) return event.detail.args;
+    if (event.args) return event.args;
+    if (event.data && event.data.args) return event.data.args;
+    return {};
+  }
+
+  function onRender(event) {
+    applyPythonReply(extractArgs(event));
+    setFrameHeight();
+  }
+
+  window.addEventListener("message", function (event) {
+    if (!event.data) return;
+    if (event.data.type === "streamlit:render") {
+      onRender(event);
+    }
+  });
+  document.addEventListener("streamlit:render", onRender);
+
+  componentReady();
+  // Restore after remount if Python already has a reply waiting
+  try {
+    const pe = sessionStorage.getItem("sci_pending_expr");
+    if (pe) {
+      expression = pe;
+      cursor = pe.length;
+    }
+  } catch (e) {}
+  render();
+  try {
+    window.focus();
+  } catch (err) {}
+})();
+  </script>
+</body>
+</html>
