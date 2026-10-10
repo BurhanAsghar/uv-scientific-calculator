@@ -207,6 +207,40 @@ def evaluate(expression: str, angle_mode: str = "RAD") -> float | int:
 # Session / actions  (callbacks so keyboard field + mouse buttons stay in sync)
 # ---------------------------------------------------------------------------
 
+# Button labels that are scientific operations (shown as active badge on screen)
+_SCI_OPS = {
+    "sin", "cos", "tan", "asin", "acos", "atan",
+    "sinh", "cosh", "tanh",
+    "ln", "log", "log₂", "exp", "n!",
+    "√", "∛", "x²", "x³", "xʸ", "1/x", "|x|",
+}
+
+
+def _detect_active_op(expr: str) -> str | None:
+    """Find the most recent scientific function visible in the expression."""
+    if not expr:
+        return None
+    # Prefer longer names first (asin before sin, log10 before log, etc.)
+    patterns = [
+        ("asin", "asin"), ("acos", "acos"), ("atan", "atan"),
+        ("sinh", "sinh"), ("cosh", "cosh"), ("tanh", "tanh"),
+        ("sin", "sin"), ("cos", "cos"), ("tan", "tan"),
+        ("log10", "log"), ("log2", "log₂"), ("ln", "ln"),
+        ("factorial", "n!"), ("sqrt", "√"), ("cbrt", "∛"),
+        ("abs", "|x|"), ("exp", "exp"),
+    ]
+    last_pos = -1
+    found: str | None = None
+    for code, label in patterns:
+        pos = expr.rfind(f"{code}(")
+        if pos > last_pos:
+            last_pos = pos
+            found = label
+    if "**" in expr and found is None:
+        return "xʸ"
+    return found
+
+
 def _init_state() -> None:
     defaults: dict[str, Any] = {
         "expression": "",       # widget key for the expression text box
@@ -216,6 +250,7 @@ def _init_state() -> None:
         "history": [],
         "just_evaluated": False,
         "btn_seq": 0,
+        "active_op": None,      # last scientific op clicked (sin, cos, …)
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -233,7 +268,13 @@ def _append_token(token: str) -> None:
             st.session_state.expression = ""
     st.session_state.just_evaluated = False
     st.session_state.expression += mapped
+    # Keep the big screen in sync so user sees sin( / cos( / tan( immediately
     st.session_state.result = st.session_state.expression or "0"
+    if token in _SCI_OPS:
+        st.session_state.active_op = token
+    else:
+        # Refresh from expression (e.g. after digits inside sin(...))
+        st.session_state.active_op = _detect_active_op(st.session_state.expression)
 
 
 def _clear_all() -> None:
@@ -241,6 +282,12 @@ def _clear_all() -> None:
     st.session_state.result = "0"
     st.session_state.error = None
     st.session_state.just_evaluated = False
+    st.session_state.active_op = None
+
+
+def _sync_screen_from_expression() -> None:
+    st.session_state.result = st.session_state.expression or "0"
+    st.session_state.active_op = _detect_active_op(st.session_state.expression)
 
 
 def _backspace() -> None:
@@ -252,20 +299,20 @@ def _backspace() -> None:
         suffix = f"{fn}("
         if expr.endswith(suffix):
             st.session_state.expression = expr[: -len(suffix)]
-            st.session_state.result = st.session_state.expression or "0"
+            _sync_screen_from_expression()
             return
     for const in ("pi", "tau"):
         if expr.endswith(const):
             st.session_state.expression = expr[: -len(const)]
-            st.session_state.result = st.session_state.expression or "0"
+            _sync_screen_from_expression()
             return
     if expr.endswith("*10**"):
         st.session_state.expression = expr[: -len("*10**")]
-        st.session_state.result = st.session_state.expression or "0"
+        _sync_screen_from_expression()
         return
 
     st.session_state.expression = expr[:-1]
-    st.session_state.result = st.session_state.expression or "0"
+    _sync_screen_from_expression()
 
 
 def _toggle_sign() -> None:
@@ -305,6 +352,7 @@ def _equals() -> None:
         # Defer widget-key write so this works after text_input has rendered too
         st.session_state["_expr_after_eval"] = str(result)
         st.session_state.just_evaluated = True
+        st.session_state.active_op = None
         st.session_state.error = None
     except Exception as exc:  # noqa: BLE001
         st.session_state.error = str(exc)
@@ -358,11 +406,18 @@ def _inject_css() -> None:
         #MainMenu, footer, header { visibility: hidden; }
 
         .calc-brand {
-            font-weight: 600;
-            font-size: 1.65rem;
+            font-weight: 700;
+            font-size: 2rem;
             letter-spacing: -0.02em;
             color: #7ee0c3;
-            margin-bottom: 0.15rem;
+            margin-bottom: 0.1rem;
+        }
+
+        .calc-product {
+            font-weight: 500;
+            font-size: 1rem;
+            color: #c5d0dc;
+            margin-bottom: 0.35rem;
         }
 
         .calc-sub {
@@ -371,34 +426,77 @@ def _inject_css() -> None:
             margin-bottom: 1rem;
         }
 
-        .mode-badge {
+        .calc-screen {
+            background: linear-gradient(180deg, #0a0e14 0%, #121820 100%);
+            border: 1px solid #2a3544;
+            border-radius: 12px;
+            padding: 0.85rem 1.15rem 1rem;
+            margin-bottom: 0.85rem;
+            box-shadow: inset 0 2px 8px rgba(0,0,0,0.45);
+            min-height: 7.5rem;
+        }
+
+        .screen-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.45rem;
+            flex-wrap: wrap;
+        }
+
+        .mode-badge, .op-badge {
             display: inline-block;
             font-family: 'IBM Plex Mono', monospace;
             font-size: 0.75rem;
-            font-weight: 500;
+            font-weight: 600;
+            padding: 0.2rem 0.55rem;
+            border-radius: 4px;
+        }
+
+        .mode-badge {
             color: #7ee0c3;
             border: 1px solid #2d6a5a;
             background: rgba(126, 224, 195, 0.08);
-            padding: 0.15rem 0.55rem;
-            border-radius: 4px;
-            margin-bottom: 0.65rem;
+        }
+
+        .op-badge {
+            color: #ffd580;
+            border: 1px solid #8a6a2a;
+            background: rgba(255, 213, 128, 0.12);
+            letter-spacing: 0.02em;
+        }
+
+        .calc-expr-line {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 1.05rem;
+            color: #8b9cb3;
+            text-align: right;
+            min-height: 1.5rem;
+            word-break: break-all;
+            margin-bottom: 0.2rem;
+        }
+
+        .calc-expr-line .fn {
+            color: #ffd580;
+            font-weight: 600;
         }
 
         .calc-result {
             font-family: 'IBM Plex Mono', monospace;
-            font-size: 1.75rem;
+            font-size: 2rem;
             font-weight: 600;
             color: #f0f6fc;
             text-align: right;
-            margin: 0.25rem 0 0.75rem;
             word-break: break-all;
+            line-height: 1.25;
         }
 
         .calc-error {
             color: #ff7b72;
             font-size: 0.85rem;
             text-align: right;
-            margin-bottom: 0.5rem;
+            margin-top: 0.35rem;
         }
 
         .hint {
@@ -474,7 +572,7 @@ def _button_row(labels: list[str], *, primary: set[str] | None = None) -> None:
 
 def main() -> None:
     st.set_page_config(
-        page_title="Scientific Calculator",
+        page_title="Burhan Asghar — Scientific Calculator",
         page_icon="🧮",
         layout="centered",
         initial_sidebar_state="collapsed",
@@ -485,25 +583,64 @@ def main() -> None:
     _inject_css()
 
     st.markdown(
-        '<div class="calc-brand">SciCalc</div>'
+        '<div class="calc-brand">Burhan Asghar</div>'
+        '<div class="calc-product">Scientific Calculator</div>'
         '<div class="calc-sub">Type with your <b>keyboard</b> in the box below, '
         "or click buttons with your <b>mouse</b></div>",
         unsafe_allow_html=True,
     )
 
+    # Keep active_op badge in sync with whatever is in the expression box
+    live_expr = st.session_state.get("expression") or ""
+    if not st.session_state.just_evaluated:
+        st.session_state.active_op = _detect_active_op(live_expr)
+
+    active = st.session_state.get("active_op")
+    op_badge = (
+        f'<span class="op-badge">Using: {active}</span>'
+        if active
+        else ""
+    )
+
+    def _highlight_fns(text: str) -> str:
+        out = text or " "
+        for name in (
+            "asin", "acos", "atan", "sinh", "cosh", "tanh",
+            "sin", "cos", "tan", "log10", "log2", "ln",
+            "factorial", "sqrt", "cbrt", "abs", "exp",
+        ):
+            out = out.replace(f"{name}(", f'<span class="fn">{name}(</span>')
+        return out
+
+    # While building: one big live expression (sin( highlighted).
+    # After = : small expression + large numeric result.
+    if st.session_state.just_evaluated:
+        expr_html = _highlight_fns(live_expr)
+        screen_value = st.session_state.result
+    else:
+        expr_html = " "  # avoid duplicating the same text twice
+        screen_value = _highlight_fns(live_expr or "0")
+
+    err_html = (
+        f'<div class="calc-error">{st.session_state.error}</div>'
+        if st.session_state.error
+        else ""
+    )
+    # Keep HTML unindented — Streamlit treats indented blocks as code fences
     st.markdown(
-        f'<div class="mode-badge">{st.session_state.angle_mode}</div>',
+        (
+            f'<div class="calc-screen">'
+            f'<div class="screen-top">'
+            f'<span class="mode-badge">{st.session_state.angle_mode}</span>'
+            f"{op_badge}"
+            f"</div>"
+            f'<div class="calc-expr-line">{expr_html}</div>'
+            f'<div class="calc-result">{screen_value}</div>'
+            f"{err_html}"
+            f"</div>"
+        ),
         unsafe_allow_html=True,
     )
-    st.markdown(
-        f'<div class="calc-result">{st.session_state.result}</div>',
-        unsafe_allow_html=True,
-    )
-    if st.session_state.error:
-        st.markdown(
-            f'<div class="calc-error">{st.session_state.error}</div>',
-            unsafe_allow_html=True,
-        )
 
     # --- Expression field: type with keyboard OR build with mouse buttons ---
     current_expr = st.text_input(
@@ -537,6 +674,7 @@ def main() -> None:
                 st.session_state.history = st.session_state.history[:20]
                 st.session_state["_expr_after_eval"] = str(result)
                 st.session_state.just_evaluated = True
+                st.session_state.active_op = None
                 st.session_state.error = None
             except Exception as exc:  # noqa: BLE001
                 st.session_state.error = str(exc)
